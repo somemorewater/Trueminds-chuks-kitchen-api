@@ -1,3 +1,4 @@
+import redisClient from "../utils/redis.js";
 import User from "../models/User.js";
 import { signupSchema } from "../validations/auth.js";
 
@@ -25,6 +26,11 @@ export const signupController = async (req, res) => {
       referralCode,
       isVerified,
     });
+
+    if (email) {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      await redisClient.setEx(`otp:${email}`, 300, otp);
+    }
 
     const safeUser = newUser.toObject();
     delete safeUser.password;
