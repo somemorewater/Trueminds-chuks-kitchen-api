@@ -1,4 +1,5 @@
 import redisClient from "../utils/redis.js";
+import { sendEmail } from "../utils/email.js";
 import User from "../models/User.js";
 import { signupSchema } from "../validations/auth.js";
 
@@ -30,6 +31,12 @@ export const signupController = async (req, res) => {
     if (email) {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       await redisClient.setEx(`otp:${email}`, 300, otp);
+
+      await sendEmail(
+        email,
+        "Verify your Chuks Kitchen account",
+        `Your OTP is ${otp}. It expires in 5 minutes.`,
+      );
     }
 
     const safeUser = newUser.toObject();
