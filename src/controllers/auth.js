@@ -1,25 +1,38 @@
 import User from "../models/User.js";
 import { signupSchema } from "../validations/auth.js";
 
-const { name, email, phone, password, referralCode } = validatedData;
-const isVerified = email ? false : true;
-
-const newUser = await User.create({
-  name,
-  email,
-  phone,
-  password,
-  referralCode,
-  isVerified,
-});
-
 export const signupController = async (req, res) => {
   try {
     const validatedData = signupSchema.parse(req.body);
+    const { name, email, phone, password, referralCode } = validatedData;
 
-    res.status(200).json({
-      message: "Validation passed",
-      data: validatedData,
+    const orQuery = [];
+    if (email) orQuery.push({ email });
+    if (phone) orQuery.push({ phone });
+
+    const existingUser = await User.findOne({ $or: orQuery });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
+    }
+
+    const isVerified = email ? false : true;
+
+    const newUser = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      referralCode,
+      isVerified,
+    });
+
+    const safeUser = newUser.toObject();
+    delete safeUser.password;
+
+    res.status(201).json({
+      message:
+        "User created successfully. Please verify your email if provided.",
+      user: safeUser,
     });
   } catch (err) {
     if (err.name === "ZodError") {
