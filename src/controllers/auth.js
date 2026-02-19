@@ -1,6 +1,18 @@
 import User from "../models/User.js";
 import { signupSchema } from "../validations/auth.js";
 
+const { name, email, phone, password, referralCode } = validatedData;
+const isVerified = email ? false : true;
+
+const newUser = await User.create({
+  name,
+  email,
+  phone,
+  password,
+  referralCode,
+  isVerified,
+});
+
 export const signupController = async (req, res) => {
   try {
     const validatedData = signupSchema.parse(req.body);
