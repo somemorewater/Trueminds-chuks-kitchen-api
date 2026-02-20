@@ -1,6 +1,7 @@
 import redisClient from "../utils/redis.js";
 import { sendEmail } from "../utils/email.js";
 import User from "../models/User.js";
+import jwt from "jsonwebtoken";
 import { signupSchema } from "../validations/auth.js";
 
 export const signupController = async (req, res) => {
@@ -100,3 +101,49 @@ export const verifyOtpController = async (req, res) => {
   }
 };
 
+export const loginController = async (req, res) => {
+  try {
+    const { email, phone, password } = req.body;
+
+    if ((!email && !phone) || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email or phone + password required" });
+    }
+
+    const user = await User.findOne({
+      $or: [email ? { email } : null, phone ? { phone } : null].filter(Boolean),
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.email && !user.isVerified) {
+      return res.status(403).json({ message: "Email not verified" });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" },
+    );
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    res.status(200).json({
+      message: "Login successful",
+      token,
+      user: safeUser,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
