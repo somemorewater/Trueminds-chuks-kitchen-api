@@ -54,3 +54,49 @@ export const signupController = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
+export const verifyOtpController = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ message: "Invalid OTP format" });
+    }
+
+    const storedOtp = await redisClient.get(`otp:${email}`);
+    if (!storedOtp) {
+      return res.status(400).json({ message: "OTP expired or not found" });
+    }
+
+    if (storedOtp !== otp) {
+      return res.status(400).json({ message: "Incorrect OTP" });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { email },
+      { isVerified: true },
+      { new: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await redisClient.del(`otp:${email}`);
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    res.status(200).json({
+      message: "Email verified successfully",
+      user: safeUser,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
