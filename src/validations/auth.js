@@ -11,3 +11,7 @@ export const signupSchema = z
     message: "Either email or phone must be provided",
     path: ["email", "phone"],
   });
+
+export const resendOtpSchema = z.object({
+  email: z.string().email(),
+});

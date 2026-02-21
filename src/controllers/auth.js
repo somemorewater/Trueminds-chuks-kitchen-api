@@ -2,15 +2,16 @@ import redisClient from "../utils/redis.js";
 import { sendEmail } from "../utils/email.js";
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
-import { signupSchema } from "../validations/auth.js";
+import { resendOtpSchema, signupSchema } from "../validations/auth.js";
 
 export const signupController = async (req, res) => {
   try {
     const validatedData = signupSchema.parse(req.body);
     const { name, email, phone, password, referralCode } = validatedData;
+    const normalizedEmail = email ? email.trim().toLowerCase() : undefined;
 
     const orQuery = [];
-    if (email) orQuery.push({ email });
+    if (normalizedEmail) orQuery.push({ email: normalizedEmail });
     if (phone) orQuery.push({ phone });
 
     const existingUser = await User.findOne({ $or: orQuery });
@@ -18,23 +19,23 @@ export const signupController = async (req, res) => {
       return res.status(409).json({ message: "User already exists" });
     }
 
-    const isVerified = email ? false : true;
+    const isVerified = normalizedEmail ? false : true;
 
     const newUser = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       phone,
       password,
       referralCode,
       isVerified,
     });
 
-    if (email) {
+    if (normalizedEmail) {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      await redisClient.setEx(`otp:${email}`, 300, otp);
+      await redisClient.setEx(`otp:${normalizedEmail}`, 300, otp);
 
       await sendEmail(
-        email,
+        normalizedEmail,
         "Verify your Chuks Kitchen account",
         `Your OTP is ${otp}. It expires in 5 minutes.`,
       );
@@ -49,6 +50,7 @@ export const signupController = async (req, res) => {
       user: safeUser,
     });
   } catch (err) {
+    console.error(err);
     if (err.name === "ZodError") {
       return res.status(400).json({ errors: err.errors });
     }
@@ -59,15 +61,16 @@ export const signupController = async (req, res) => {
 export const verifyOtpController = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    const normalizedEmail = email ? email.trim().toLowerCase() : "";
 
-    if (!email || !otp) {
+    if (!normalizedEmail || !otp) {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
     if (!/^\d{6}$/.test(otp)) {
       return res.status(400).json({ message: "Invalid OTP format" });
     }
 
-    const storedOtp = await redisClient.get(`otp:${email}`);
+    const storedOtp = await redisClient.get(`otp:${normalizedEmail}`);
     if (!storedOtp) {
       return res.status(400).json({ message: "OTP expired or not found" });
     }
@@ -77,16 +80,16 @@ export const verifyOtpController = async (req, res) => {
     }
 
     const user = await User.findOneAndUpdate(
-      { email },
+      { email: normalizedEmail },
       { isVerified: true },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    await redisClient.del(`otp:${email}`);
+    await redisClient.del(`otp:${normalizedEmail}`);
 
     const safeUser = user.toObject();
     delete safeUser.password;
@@ -128,6 +131,10 @@ export const loginController = async (req, res) => {
       return res.status(401).json({ message: "Incorrect password" });
     }
 
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: "JWT secret not configured" });
+    }
+
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -144,6 +151,41 @@ export const loginController = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resendOtpController = async (req, res) => {
+  try {
+    const validatedData = resendOtpSchema.parse(req.body);
+    const normalizedEmail = validatedData.email.trim().toLowerCase();
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (!user.email) {
+      return res.status(400).json({ message: "Email is required for OTP" });
+    }
+    if (user.isVerified) {
+      return res.status(409).json({ message: "Email already verified" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await redisClient.setEx(`otp:${normalizedEmail}`, 300, otp);
+
+    await sendEmail(
+      normalizedEmail,
+      "Verify your Chuks Kitchen account",
+      `Your OTP is ${otp}. It expires in 5 minutes.`,
+    );
+
+    res.status(200).json({ message: "OTP resent successfully" });
+  } catch (err) {
+    console.error(err);
+    if (err.name === "ZodError") {
+      return res.status(400).json({ errors: err.errors });
+    }
     res.status(500).json({ message: "Server error" });
   }
 };
