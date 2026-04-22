@@ -4,7 +4,7 @@ Backend API for authentication, menu management, cart management, and order proc
 
 ## System Overview
 
-This service is an Express + MongoDB backend organized by feature modules:
+This service is an Express.js + MongoDB backend organized by feature modules:
 
 - `auth`: signup, OTP verification, login, OTP resend
 - `foods`: create/list/update/disable menu items
