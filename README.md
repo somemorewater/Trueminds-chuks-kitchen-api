@@ -75,7 +75,7 @@ Allowed statuses:
 ### 1. Customer Access
 
 - User signs up and logs in through `/api/auth` endpoints.
-- Auth logic is already implemented in this codebase and kept separate from food/cart/order logic.
+- Auth logic is implemented in this codebase and kept separate from food/cart/order logic.
 
 ### 2. Menu Browsing
 
